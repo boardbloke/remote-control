@@ -18,19 +18,28 @@ package io.remotecontrol.client
 import io.remotecontrol.groovy.client.ClosureCommandGenerator
 import io.remotecontrol.groovy.client.RawClosureCommand
 import spock.lang.Specification
+import spock.lang.Unroll
 
 class CommandGeneratorSpec extends Specification {
 
-	def generator = new ClosureCommandGenerator(this.getClass().classLoader)
-	
-	def "support size"(Closure<?> command, int size) {
-		expect:
-		generator.generate(new RawClosureCommand(command, Collections.emptyList())).supports.size() == size
-		where:
-		command                                                              | size
-		{ -> "123" }                                                         | 0
-		{ -> def c = { -> "123" } }                                          | 1
-		{ -> def c = { -> def a = { -> def b = { -> } } }; def d = { -> } }  | 4
-	}
+    def generator = new ClosureCommandGenerator(this.getClass().classLoader)
 
+    @Unroll
+    def "support size #size"() {
+        expect:
+        generator.generate(new RawClosureCommand(command, Collections.emptyList())).supports.size() == size
+        command instanceof Closure
+
+        where:
+        command                      | size
+        TestClosures.testClosureZero | 0
+        TestClosures.testClosureOne  | 1
+        TestClosures.testClosureFour | 4
+    }
+}
+
+class TestClosures {
+    static Closure testClosureZero = { -> "123" }
+    static Closure testClosureOne = { -> def c = { -> "123" } }
+    static Closure testClosureFour = { -> def c = { -> def a = { -> def b = { -> } } }; def d = { -> } }
 }

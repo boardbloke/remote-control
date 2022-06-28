@@ -26,6 +26,8 @@ import io.remotecontrol.transport.local.LocalTransport
 import io.remotecontrol.util.FilteringClassLoader
 import io.remotecontrol.UnserializableExceptionException
 import io.remotecontrol.UnserializableCommandException
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
 
 /**
  * This test case shows how to use the remotecontrol control and some of it's limitations
@@ -52,6 +54,7 @@ class SmokeTests extends GroovyTestCase {
     def transport
     def clientClassLoader
 
+    @BeforeEach
     void setUp() {
         if (remote == null) {
             // we need to create a classloader for the "server" side that cannot access
@@ -69,6 +72,7 @@ class SmokeTests extends GroovyTestCase {
     /**
      * The result of the command run on the server is sent back and is returned
      */
+    @Test
     void testReturingValues() {
         assert remote { def a = 1; a + 1 } == 2
     }
@@ -76,6 +80,7 @@ class SmokeTests extends GroovyTestCase {
     /**
      * Commands can contain other closures
      */
+    @Test
     void testWithInnerClosures() {
         assert [2, 3, 4] == remote {
             [1, 2, 3].collect { [it].collect { it + 1 }[0] }
@@ -87,6 +92,7 @@ class SmokeTests extends GroovyTestCase {
      * client side with the actual exception instance that was thrown server
      * side as the cause
      */
+    @Test
     void testThrowingException() {
         def thrown = null
         try {
@@ -103,6 +109,7 @@ class SmokeTests extends GroovyTestCase {
     /**
      * If the command returns something that is unserialisable, we thrown an UnserializableReturnException
      */
+    @Test
     void testUnserialisableReturn() {
         shouldFail(UnserializableReturnException) {
             remote.exec { System.out }
@@ -112,18 +119,21 @@ class SmokeTests extends GroovyTestCase {
     /**
      * If the command returns something that is unserialisable, we thrown an UnserializableReturnException
      */
+    @Test
     void testNestedUnserialisableReturn() {
         shouldFail(UnserializableReturnException) {
             remote.exec { [m: [out: System.out]] }
         }
     }
 
+    @Test
     void testUnserializableExceptionsAreWrappedInUnserializableExceptionException() {
         shouldFailWithCause(UnserializableExceptionException) {
             remote.exec { throw new IncorrectClosureArgumentsException({ 1 }, [System.out], OutputStream) }
         }
     }
 
+    @Test
     void testUnserializableExceptionWithCause() {
         def cause = null
         try {
@@ -140,11 +150,13 @@ class SmokeTests extends GroovyTestCase {
         }
     }
 
+    @Test
     void testCanSpecifyToUseNullIfReturnWasUnserializable() {
         remote = new RemoteControl(transport, UnserializableResultStrategy.NULL, clientClassLoader)
         assert remote.exec { System.out } == null
     }
 
+    @Test
     void testCanSpecifyToUseStringRepresentationIfReturnWasUnserializable() {
         remote = new RemoteControl(transport, UnserializableResultStrategy.STRING, clientClassLoader)
         assert remote.exec { System.out }.contains("Stream")
@@ -153,6 +165,7 @@ class SmokeTests extends GroovyTestCase {
     /**
      * If the command returns an exception but does not throw it, we just return the exception
      */
+    @Test
     void testReturningException() {
         assert (remote { new Exception() }) instanceof Exception
     }
@@ -160,6 +173,7 @@ class SmokeTests extends GroovyTestCase {
     /**
      * We can access lexical scope (within limits)
      */
+    @Test
     void testAccessingLexicalScope() {
         def a = 1
         assert remote { a + 1 } == 2
@@ -168,6 +182,7 @@ class SmokeTests extends GroovyTestCase {
     /**
      * Anything in lexical scope we access must be serialisable
      */
+    @Test
     void testAccessingNonSerializableLexicalScope() {
         def a = System.out
         shouldFail(UnserializableCommandException) {
@@ -179,6 +194,7 @@ class SmokeTests extends GroovyTestCase {
      * Owner ivars can't be accessed because they aren't really lexical
      * so get treated as bean names from the app context
      */
+    @Test
     void testAccessingIvar() {
         def thrown
         try {
@@ -194,6 +210,7 @@ class SmokeTests extends GroovyTestCase {
     /**
      * We can pass curried commands
      */
+    @Test
     void testCurryingCommands() {
         def command = { it + 2 }
         assert remote.exec(command.curry(2)) == 4
@@ -202,6 +219,7 @@ class SmokeTests extends GroovyTestCase {
     /**
      * We can curry a command as many times as we need to
      */
+    @Test
     void testCurryingCommandsMoreThanOnce() {
         def command = { a, b -> a + b }
         def curry1 = command.curry(1)
@@ -213,6 +231,7 @@ class SmokeTests extends GroovyTestCase {
     /**
      * Like everything else, currying args must be serialisable
      */
+    @Test
     void testCurryingArgsMustBeSerializable() {
         shouldFail(UnserializableCommandException) {
             remote.exec({ it }.curry(System.out))
@@ -222,16 +241,19 @@ class SmokeTests extends GroovyTestCase {
     /**
      * Closures defined outside of the exec closures can be used inside of them if only the closures defined outside are passed as contextClosure option. Useful when creating DSLs.
      */
+    @Test
     void testPassingUsedClosures() {
         def contextClosure = { 1 }
         assert remote.exec(usedClosures: [contextClosure]) { contextClosure() + 1 } == 2
     }
 
+    @Test
     void testPassingUsedClosuresWithInnerClosures() {
         def contextClosure = { (1..3).inject(0) { sum, value -> sum + value } }
         assert remote.exec(usedClosures: [contextClosure]) { contextClosure() } == 6
     }
 
+    @Test
     void testPassingUsedClosuresThatAccessADelegate() {
         def contextClosure = { size() }
         assert remote.exec(usedClosures: [contextClosure]) {
@@ -240,12 +262,14 @@ class SmokeTests extends GroovyTestCase {
         } == 9
     }
 
+    @Test
     void testPassingWrongTypeInUsedClosures() {
         assert shouldFail(IllegalArgumentException) {
             remote.exec(usedClosures: {}) {}
         } == "'usedClosures' argument must be iterable"
     }
 
+    @Test
     void testPassingUnknownOption() {
         assert shouldFail(IllegalArgumentException) {
             remote.exec(unknown: {}) {}
@@ -256,6 +280,7 @@ class SmokeTests extends GroovyTestCase {
      * Any classes referenced have to be available in the remotecontrol app,
      * and any classes defined in tests ARE NOT.
      */
+    @Test
     void testCannotReferToClassesNotInTheApp() {
         def a = new GroovyClassLoader().parseClass("class T implements Serializable {}").newInstance()
         shouldFailWithCause(ClassNotFoundException) {
@@ -271,6 +296,7 @@ class SmokeTests extends GroovyTestCase {
     @SuppressWarnings("EmptyClass")
     static class Inner {}
 
+    @Test
     void testCannotInstantiateClassesNotInTheApp() {
         shouldFailWithCause(NoClassDefFoundError) {
             remote.exec { new Inner() }
@@ -281,6 +307,7 @@ class SmokeTests extends GroovyTestCase {
      * Multiple commands can be sent, the return value of the previous
      * command is passed to the next command as it's single argument
      */
+    @Test
     void testCommandChaining() {
         remote.exec({ 1 }, { it + 1 }) { it + 1 } == 3
     }
@@ -288,6 +315,7 @@ class SmokeTests extends GroovyTestCase {
     /**
      * The delegate of commands is like a map and can store properties.
      */
+    @Test
     void testCanUseDelegateStorageAlongChain() {
         remote.exec(
             { num = 1 },
@@ -299,29 +327,35 @@ class SmokeTests extends GroovyTestCase {
      * Trying to access a property that is not existing in the delegate
      * causes a MissingPropertyException
      */
+    @Test
     void testAccessingNonExistantPropertyFromDelegateCausesMPE() {
         shouldFailWithCause(MissingPropertyException) {
             remote.exec { iDontExist == true }
         }
     }
 
+    @Test
     void testCanSetProperties() {
         remote.exec { new GregorianCalendar().time = new Date() }
     }
 
+    @Test
     void testCanCallMethodsDynamicaly() {
         def methodName = "setTime"
         remote.exec { new GregorianCalendar()."$methodName"(new Date()) } != null
     }
 
+    @Test
     void testCanUseSpreadOperator() {
         remote.exec { [1, 2, 3]*.toString() } == ["1", "2", "3"]
     }
 
+    @Test
     void testCanUseSpreadMapOperator() {
         remote.exec { new HashMap(*: [a: 1, b: 2]) }
     }
 
+    @Test
     void testExternalLibrariesExecutingCodeOnRemote() {
         assert new RemoteCallingClass(remote).multiplyBy2OnRemote(3) == 6
     }

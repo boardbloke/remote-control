@@ -19,13 +19,13 @@ if (jvmEncoding != "UTF-8") {
 }
 
 allprojects {
-    version = '0.6-SNAPSHOT'
+    version = '0.8-SNAPSHOT'
     group = 'io.remotecontrol'
 
     ext {
         isSnapshot = version.endsWith("SNAPSHOT")
-        groovyVersion = "2.2.1"
-        spockVersion = "0.7-groovy-2.0"
+        groovyVersion = "3.0.11"
+        spockVersion = "2.1-groovy-3.0"
 
         spockDependency = "org.spockframework:spock-core:$spockVersion"
         groovyDependency = "org.codehaus.groovy:groovy-all:$groovyVersion"
@@ -38,37 +38,37 @@ allprojects {
     apply plugin: "idea"
 }
 
-apply plugin: 'artifactory'
-
-artifactory {
-    contextUrl = 'http://oss.jfrog.org'
-}
-
-artifactoryPublish { task ->
-    skip true
-    rootProject.artifactory {
-        publish {
-            repository {
-                repoKey = isSnapshot ? 'oss-snapshot-local' : 'oss-release-local'
-                gradle.taskGraph.whenReady { taskGraph ->
-                    if (taskGraph.hasTask(task)) {
-                        username = ratpackBintrayUser
-                        password = ratpackBintrayApiKey
-                    }
-                }
-            }
-        }
-    }
-}
+//apply plugin: 'artifactory'
+//
+//artifactory {
+//    contextUrl = 'http://oss.jfrog.org'
+//}
+//
+//artifactoryPublish { task ->
+//    skip true
+//    rootProject.artifactory {
+//        publish {
+//            repository {
+//                repoKey = isSnapshot ? 'oss-snapshot-local' : 'oss-release-local'
+//                gradle.taskGraph.whenReady { taskGraph ->
+//                    if (taskGraph.hasTask(task)) {
+//                        username = ratpackBintrayUser
+//                        password = ratpackBintrayApiKey
+//                    }
+//                }
+//            }
+//        }
+//    }
+//}
 
 apply from: "$rootDir/gradle/idea.gradle"
 
 def groovyModules = [
-    ":module:remote-core", ":module:remote-transport-local", ":module:remote-transport-http"
+        ":module:remote-core", ":module:remote-transport-local", ":module:remote-transport-http"
 ]
 
 def publishedModules = [
-    ":module:remote-core", ":module:remote-transport-local", ":module:remote-transport-http"
+        ":module:remote-core", ":module:remote-transport-local", ":module:remote-transport-http"
 ]
 
 def publishedGroovyModules = groovyModules.findAll { it in publishedModules }
@@ -83,17 +83,27 @@ subprojects {
         }
 
         dependencies {
-            compile groovyDependency
-            testCompile spockDependency
+            implementation groovyDependency
+            testImplementation spockDependency
         }
 
-        sourceCompatibility = 1.6
-        targetCompatibility = 1.6
+        sourceCompatibility = 1.8
+        targetCompatibility = 1.8
+
+        tasks.withType(GroovyCompile) {
+            configure(groovyOptions) {
+                forkOptions.jvmArgs = ['-Xmx1024m']
+            }
+        }
+
+        tasks.withType(Test) {
+            useJUnitPlatform()
+        }
     }
 
     if (project.path in publishedModules) {
-        apply plugin: 'maven'
-        apply plugin: 'artifactory'
+        apply plugin: 'maven-publish'
+//        apply plugin: 'artifactory'
         apply from: "$rootDir/gradle/pom.gradle"
         apply plugin: 'signing'
 
@@ -154,26 +164,27 @@ subprojects {
     }
 }
 
+
 project(':module:remote-core') {
     description "Provides the core of the remote library"
     dependencies {
-        testCompile project(":module:remote-transport-local"), project(":module:remote-using-lib")
+        testImplementation project(":module:remote-transport-local"), project(":module:remote-using-lib")
     }
 }
 
 project(':module:remote-transport-http') {
     description "Support for sending and receiving remote commands over HTTP (including a servlet implementation)"
     dependencies {
-        compile project(":module:remote-core"),
-            "javax.servlet:servlet-api:2.4"
-        testCompile "org.mortbay.jetty:jetty:6.1.21"
+        implementation project(":module:remote-core")
+        implementation "javax.servlet:servlet-api:2.4"
+        testImplementation "org.eclipse.jetty:jetty-server:11.0.11"
     }
 }
 
 project(':module:remote-transport-local') {
     description "Provides an in process bridge for sending/receiving commands"
     dependencies {
-        compile project(":module:remote-core")
+        implementation project(":module:remote-core")
     }
 }
 
@@ -181,8 +192,8 @@ project(':module:remote-using-lib') {
     apply plugin: "groovy"
 
     dependencies {
-        compile groovyDependency
-        compile project(":module:remote-core")
+        implementation groovyDependency
+        implementation project(":module:remote-core")
     }
 }
 
@@ -192,26 +203,33 @@ project(":doc:manual") {
         output = file("build/manual")
     }
 
-    task compile << {
-        new markdown2book.Generator(src, output, "UTF-8").generate()
+    tasks.register("compile") {
+        doLast {
+            new markdown2book.Generator(src, output, "UTF-8").generate()
+        }
     }
 
-    task copyGroovyDoc(dependsOn: publishedGroovyModules.collect { project(it) }*.groovydoc) << {
-        def groovyApi = new File(output, "groovy-api")
-        if (!groovyApi.exists()) {
-            assert groovyApi.mkdirs()
-        }
+    tasks.register("copyGroovyDoc") {
+        dependsOn publishedGroovyModules.collect { project(it) }*.groovydoc
+        doLast {
+            def groovyApi = new File(output, "groovy-api")
+            if (!groovyApi.exists()) {
+                assert groovyApi.mkdirs()
+            }
 
-        publishedGroovyModules.collect { module ->
-            def baseName = module[module.lastIndexOf(":") + 1..module.size() - 1]
-            copy {
-                from project(module).groovydoc.destinationDir
-                into new File(groovyApi, baseName)
+            publishedGroovyModules.collect { module ->
+                def baseName = module[module.lastIndexOf(":") + 1..module.size() - 1]
+                copy {
+                    from project(module).groovydoc.destinationDir
+                    into new File(groovyApi, baseName)
+                }
             }
         }
     }
 
-    task assemble(dependsOn: [compile, copyGroovyDoc], overwrite: true) {}
+    tasks.register('assemble') {
+        dependsOn tasks.compile, tasks.copyGroovyDoc
+    }
 }
 
 project(":doc:site") {
@@ -222,9 +240,11 @@ project(":doc:site") {
         thisManual = file("$manualDir/$project.version")
     }
 
-    task clean(overwrite: true) << {
-        if (output.exists()) {
-            assert output.deleteDir()
+    tasks.register('clean') {
+        doLast {
+            if (output.exists()) {
+                assert output.deleteDir()
+            }
         }
     }
 
